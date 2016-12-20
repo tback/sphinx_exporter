@@ -47,7 +47,7 @@ const (
 
 // SQL Queries.
 const (
-	upQuery              = `SELECT 1`
+	upQuery = `SELECT 1`
 )
 
 // landingPage contains the HTML served at '/'.
