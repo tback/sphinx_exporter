@@ -9,11 +9,11 @@ import (
 	"path"
 	"time"
 
+	"github.com/go-ini/ini"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
-	"gopkg.in/ini.v1"
 
 	"github.com/tback/sphinx_exporter/collector"
 )

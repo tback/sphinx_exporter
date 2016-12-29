@@ -1,0 +1,24 @@
+package: github.com/tback/sphinx_exporter
+import:
+- package: github.com/go-ini/ini
+  version: ^1.23.0
+- package: github.com/go-sql-driver/mysql
+  version: ^1.3.0
+- package: github.com/prometheus/client_golang
+  version: ^0.8.0
+  subpackages:
+  - prometheus
+- package: github.com/prometheus/common
+  subpackages:
+  - log
+  - version
+testImport:
+- package: github.com/DATA-DOG/go-sqlmock
+  version: ^1.1.4
+- package: github.com/prometheus/client_model
+  subpackages:
+  - go
+- package: github.com/smartystreets/goconvey
+  version: ^1.6.2
+  subpackages:
+  - convey
