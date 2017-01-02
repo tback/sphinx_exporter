@@ -1,68 +1,49 @@
-package main
+package sphinx_exporter
 
 import (
 	"database/sql"
-	"flag"
 	"fmt"
 	"net/http"
-	"os"
-	"path"
 	"time"
 
 	"github.com/go-ini/ini"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 
 	"github.com/tback/sphinx_exporter/collector"
 )
 
-var (
-	showVersion = flag.Bool(
-		"version", false,
-		"Print version information.",
-	)
-	listenAddress = flag.String(
-		"web.listen-address", ":9104",
-		"Address to listen on for web interface and telemetry.",
-	)
-	metricPath = flag.String(
-		"web.telemetry-path", "/metrics",
-		"Path under which to expose metrics.",
-	)
-	configMycnf = flag.String(
-		"config.my-cnf", path.Join(os.Getenv("HOME"), ".my.cnf"),
-		"Path to .my.cnf file to read MySQL credentials from.",
-	)
-)
+type Config struct {
+	// Address to listen on for web interface and telemetry.
+	ListenAddress string
 
-// Metric name parts.
-const (
+	// Path under which to expose metrics.
+	MetricPath string
+
+	// Path to .my.cnf file to read MySQL credentials from.",
+	ConfigMycnf string
+
 	// Namespace for all metrics.
-	namespace = "sphinx"
-	// Subsystem(s).
-	exporter = "exporter"
-)
+	Namespace string
+
+	// Subsystem
+	Subsystem string
+
+	// Data Source Name
+	DSN string
+}
 
 // SQL Queries.
 const (
 	upQuery = `SELECT 1`
 )
 
-// landingPage contains the HTML served at '/'.
-// TODO: Make this nicer and more informative.
-var landingPage = []byte(`<html>
-<head><title>Sphinx exporter</title></head>
-<body>
-<h1>Sphinx exporter</h1>
-<p><a href='` + *metricPath + `'>Metrics</a></p>
-</body>
-</html>
-`)
-
 // Exporter collects Sphinx metrics. It implements prometheus.Collector.
 type Exporter struct {
+	config          *Config
 	dsn             string
 	duration, error prometheus.Gauge
 	totalScrapes    prometheus.Counter
@@ -71,39 +52,64 @@ type Exporter struct {
 }
 
 // NewExporter returns a new MySQL exporter for the provided DSN.
-func NewExporter(dsn string) *Exporter {
-	return &Exporter{
-		dsn: dsn,
+func NewExporter(c *Config) *Exporter {
+	x := &Exporter{
+		config: c,
+		dsn:    c.DSN,
 		duration: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: exporter,
+			Namespace: c.Namespace,
+			Subsystem: c.Subsystem,
 			Name:      "last_scrape_duration_seconds",
 			Help:      "Duration of the last scrape of metrics from Sphinx.",
 		}),
 		totalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: namespace,
-			Subsystem: exporter,
+			Namespace: c.Namespace,
+			Subsystem: c.Subsystem,
 			Name:      "scrapes_total",
 			Help:      "Total number of times Sphinx was scraped for metrics.",
 		}),
 		scrapeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Subsystem: exporter,
+			Namespace: c.Namespace,
+			Subsystem: c.Subsystem,
 			Name:      "scrape_errors_total",
 			Help:      "Total number of times an error occurred scraping a Sphinx.",
 		}, []string{"collector"}),
 		error: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: exporter,
+			Namespace: c.Namespace,
+			Subsystem: c.Subsystem,
 			Name:      "last_scrape_error",
 			Help:      "Whether the last scrape of metrics from Sphinx resulted in an error (1 for error, 0 for success).",
 		}),
 		sphinxUp: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
+			Namespace: c.Namespace,
 			Name:      "up",
 			Help:      "Whether the Sphinx server is up.",
 		}),
 	}
+	if x.config.DSN == "" {
+		var err error
+		if x.config.ConfigMycnf == "" {
+			log.Fatal("No MySQL Data Name Space given.")
+		}
+		x.config.DSN, err = ParseMycnf(x.config.ConfigMycnf)
+		if err != nil {
+			log.Fatalf("Error loading mycnf: %v", err)
+		}
+	}
+	return x
+}
+
+func (e *Exporter) NewDefaultServer() *http.Server {
+	prometheus.MustRegister(e)
+	mux := http.NewServeMux()
+	mux.Handle(e.config.MetricPath, promhttp.Handler())
+	s := &http.Server{
+		Addr:        e.config.ListenAddress,
+		ReadTimeout: 3e9,
+		Handler:     mux,
+	}
+
+	return s
 }
 
 // Describe implements prometheus.Collector.
@@ -180,7 +186,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 	}
 }
 
-func parseMycnf(config interface{}) (string, error) {
+func ParseMycnf(config interface{}) (string, error) {
 	var dsn string
 	cfg, err := ini.Load(config)
 	if err != nil {
@@ -205,35 +211,4 @@ func parseMycnf(config interface{}) (string, error) {
 
 func init() {
 	prometheus.MustRegister(version.NewCollector("sphinx_exporter"))
-}
-
-func main() {
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Fprintln(os.Stdout, version.Print("sphinx_exporter"))
-		os.Exit(0)
-	}
-
-	log.Infoln("Starting sphinx_exporter", version.Info())
-	log.Infoln("Build context", version.BuildContext())
-
-	dsn := os.Getenv("DATA_SOURCE_NAME")
-	if len(dsn) == 0 {
-		var err error
-		if dsn, err = parseMycnf(*configMycnf); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	exporter := NewExporter(dsn)
-	prometheus.MustRegister(exporter)
-
-	http.Handle(*metricPath, prometheus.Handler())
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(landingPage)
-	})
-
-	log.Infoln("Listening on", *listenAddress)
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }

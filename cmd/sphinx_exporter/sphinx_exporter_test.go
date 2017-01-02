@@ -1,4 +1,4 @@
-package sphinx_exporter
+package main
 
 import (
 	"testing"
