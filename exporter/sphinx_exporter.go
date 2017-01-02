@@ -1,4 +1,4 @@
-package sphinx_exporter
+package exporter
 
 import (
 	"database/sql"
@@ -91,7 +91,7 @@ func NewExporter(c *Config) *Exporter {
 		if x.config.ConfigMycnf == "" {
 			log.Fatal("No MySQL Data Name Space given.")
 		}
-		x.config.DSN, err = ParseMycnf(x.config.ConfigMycnf)
+		x.config.DSN, err = parseMycnf(x.config.ConfigMycnf)
 		if err != nil {
 			log.Fatalf("Error loading mycnf: %v", err)
 		}
@@ -186,7 +186,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) {
 	}
 }
 
-func ParseMycnf(config interface{}) (string, error) {
+func parseMycnf(config interface{}) (string, error) {
 	var dsn string
 	cfg, err := ini.Load(config)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 
-	exporter "github.com/tback/sphinx_exporter"
+	"github.com/tback/sphinx_exporter/exporter"
 )
 
 var (
