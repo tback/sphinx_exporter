@@ -86,12 +86,12 @@ func NewExporter(c *Config) *Exporter {
 			Help:      "Whether the Sphinx server is up.",
 		}),
 	}
-	if x.config.DSN == "" {
+	if x.dsn == "" {
 		var err error
 		if x.config.ConfigMycnf == "" {
-			log.Fatal("No MySQL Data Name Space given.")
+			log.Fatal("No MySQL DATA_SOURCE_NAME given.")
 		}
-		x.config.DSN, err = parseMycnf(x.config.ConfigMycnf)
+		x.dsn, err = parseMycnf(x.config.ConfigMycnf)
 		if err != nil {
 			log.Fatalf("Error loading mycnf: %v", err)
 		}
